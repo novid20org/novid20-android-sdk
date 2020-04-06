@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="permission_bluetooth">android.permission.BLUETOOTH</string>
+    <string name="permission_notifications">novid20.permission.NOTIFICATIONS</string>
+    <string name="permission_location">android.permission.ACCESS_FINE_LOCATION</string>
+    <string name="permission_activity">android.permission.ACTIVITY_RECOGNITION</string>
+    <string name="permission_audio">android.permission.RECORD_AUDIO</string>
+    <string name="permission_phone">android.permission.READ_PHONE_STATE</string>
+</resources>

@@ -15,6 +15,7 @@ import android.content.IntentFilter
 import org.novid20.sdk.Logger
 import org.novid20.sdk.NovidSdk
 import org.novid20.sdk.TECHNOLOGY_BLUETOOTH
+import org.novid20.sdk.model.NovidRepositoryImpl
 
 internal class BluetoothScanReceiver : BroadcastReceiver() {
 
@@ -72,7 +73,7 @@ internal class BluetoothScanReceiver : BroadcastReceiver() {
             val bondState: Int? = device.bondState
 
             val novidRepository = NovidSdk.getInstance().getRepository()
-            if (deviceName?.isNotBlank() == true) {
+            if (deviceName?.startsWith(NovidRepositoryImpl.BT_NAME_PREFIX) == true) {
                 Logger.debug(TAG, "Bluetooth: $deviceName rssi:$rssi")
                 novidRepository.contactDetected(deviceName, source = TECHNOLOGY_BLUETOOTH, rssi = rssi)
             }

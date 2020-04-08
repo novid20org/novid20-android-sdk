@@ -126,7 +126,14 @@ internal class BleBluetoothManager(
 
             characteristic?.let {
                 gatt.readCharacteristic(it)
-            } ?: gatt?.disconnect()
+            } ?: run {
+                // store it in our temporary cache to not connect again
+                gatt?.device?.address?.let {
+                    Logger.warn(TAG, "Failed to discover $it")
+                    deviceMap[it] = it
+                }
+                gatt?.disconnect()
+            }
         }
 
         override fun onCharacteristicRead(
@@ -253,8 +260,28 @@ internal class BleBluetoothManager(
                 }
             } else if (deviceName?.startsWith(NovidRepositoryImpl.BT_NAME_PREFIX) == true) {
                 Logger.debug(TAG, "Found iOS Background: $deviceName $deviceAddress rssi:$rssi")
-                // IOS Case
                 deviceName.let { repo.contactDetected(it, source = TECHNOLOGY_BLE_NAME, rssi = rssi) }
+            } else {
+                val isInCache = deviceAddress?.let { deviceMap.contains(it) ?: false }
+                if (isInCache == false) {
+                    // Well.. lets potentially connect to third party devices,
+                    // but maybe its our iOS device in background without cache
+                    // thanks to "donothingloop"
+                    connectTo(device)
+                } else {
+                    val userId = deviceMap[deviceAddress]
+                    if (userId?.startsWith(NovidRepositoryImpl.BT_NAME_PREFIX) == true) {
+                        val current = System.currentTimeMillis()
+                        deviceAddress?.let { foundAddressMap[deviceAddress] = current }
+                        userId.let { id ->
+                            repo.contactDetected(
+                                id,
+                                source = TECHNOLOGY_BLE_CACHE,
+                                rssi = rssi
+                            )
+                        }
+                    }
+                }
             }
         }
 

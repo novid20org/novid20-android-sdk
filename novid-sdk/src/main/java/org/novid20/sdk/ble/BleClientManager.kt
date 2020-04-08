@@ -215,6 +215,7 @@ internal class BleBluetoothManager(
 
             val rssi = result?.rssi
             val bytes = scanRecord?.bytes
+            val appleMsd = scanRecord?.getManufacturerSpecificData(0x004C)
 
             Logger.verbose(TAG, "BLE Result: $deviceName rssi:$rssi address:$deviceAddress ${bytes?.joinToString()}")
 
@@ -263,7 +264,10 @@ internal class BleBluetoothManager(
                 deviceName.let { repo.contactDetected(it, source = TECHNOLOGY_BLE_NAME, rssi = rssi) }
             } else {
                 val isInCache = deviceAddress?.let { deviceMap.contains(it) ?: false }
-                if (isInCache == false) {
+                
+                // Only connect to third party device if the device has a manufacturer data entry
+                // from Apple in order to detect background iOS devices.
+                if (isInCache == false && appleMsd != null) {
                     // Well.. lets potentially connect to third party devices,
                     // but maybe its our iOS device in background without cache
                     // thanks to "donothingloop"

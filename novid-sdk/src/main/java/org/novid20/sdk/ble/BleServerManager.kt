@@ -51,9 +51,6 @@ internal class BleServerManager(
 
     val novidService = UserIdProfile.createNovidService()
 
-    private var userIdService: BluetoothGattService? = null
-
-
     /**
      * Callback to handle incoming requests to the GATT server.
      * All read/write requests for characteristics and descriptors are handled here.
@@ -152,16 +149,6 @@ internal class BleServerManager(
         // nov20-661034869758062
         val first = userId!!.substring(6, 6 + 4) // cut of "nov20-"
         val second = userId.substring(6 + 4, userId.length)
-
-        try {
-            userIdService = BluetoothGattService(
-                UUID.fromString("00000000-0000-0000-$first-$second"),
-                BluetoothGattService.SERVICE_TYPE_PRIMARY
-            )
-        } catch (t: IllegalArgumentException) {
-            //java.lang.IllegalArgumentException: Invalid UUID
-            Logger.error(TAG, t.message, t)
-        }
 
         bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter

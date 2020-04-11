@@ -8,27 +8,22 @@ package org.novid20.sdk.ble
 
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
-import java.util.UUID
 
 /**
  * Implementation of the Bluetooth GATT Profile.
  * https://www.bluetooth.com/specifications/adopted-specifications
  */
+
 internal object UserIdProfile {
 
-    val APP_SERVICE: UUID = UUID.fromString("8b9b6576-6db7-11ea-bc55-0242ac130003")
-    val NOVID_SERVICE: UUID = UUID.fromString("b16efb34-6c34-11ea-bc55-0242ac130003")
-
-    val USERID_INFO: UUID = UUID.fromString("1d45dc00-6db7-11ea-bc55-0242ac130003")
-
-    fun createNovidService(): BluetoothGattService {
+    fun createNovidService(bleDetectionConfig: BleDetectionConfig): BluetoothGattService {
         val novidService = BluetoothGattService(
-            NOVID_SERVICE,
+            bleDetectionConfig.serviceUuid,
             BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
 
         val userIdCharacteristics = BluetoothGattCharacteristic(
-            USERID_INFO,
+            bleDetectionConfig.characteristicUuid,
             //Read-only characteristic
             BluetoothGattCharacteristic.PROPERTY_READ,
             BluetoothGattCharacteristic.PERMISSION_READ

@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
 private const val TAG = "NotificationService"
+
 internal const val NOTIFICATION_ID = 13
 internal const val NOTIFICATION_CHANNEL = "NOVID_CHANNEL"
 const val NOTIFICATION_MESSAGE_ID = 14

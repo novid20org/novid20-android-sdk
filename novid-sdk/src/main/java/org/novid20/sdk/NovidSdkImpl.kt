@@ -32,6 +32,7 @@ import org.novid20.sdk.analytics.AnalyticsSyncWorker
 import org.novid20.sdk.analytics.DeviceDataProvider
 import org.novid20.sdk.api.AuthTokenLoader
 import org.novid20.sdk.ble.BleBluetoothManager
+import org.novid20.sdk.ble.BleDetectionConfig
 import org.novid20.sdk.ble.BleServerManager
 import org.novid20.sdk.ble.NovidBeaconManager
 import org.novid20.sdk.core.CountdownThreadHandler
@@ -40,7 +41,6 @@ import org.novid20.sdk.model.NovidRepository
 import org.novid20.sdk.model.NovidRepositoryImpl
 import org.novid20.sdk.nearby.NearbyConnectionsManager
 import org.novid20.sdk.nearby.NearbyMessagesManager
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 
@@ -63,24 +63,26 @@ internal const val TECHNOLOGY_NEARBY_MESSAGES = "nearby messages"
 
 internal class NovidSdkImpl internal constructor(
     val context: Context,
-    override val deviceDataProvider: DeviceDataProvider,
-    private var sdkAccessToken: String
+    private val sdkAccessToken: String,
+    override val bundleId: String,
+    override val bleDetectionConfig: BleDetectionConfig,
+    override val deviceDataProvider: DeviceDataProvider
 ) : NovidSdk {
 
     override var authTokenLoader: AuthTokenLoader? = null
-    var novidRepository: NovidRepository = NovidRepositoryImpl(this, context)
+    var novidRepository: NovidRepository = NovidRepositoryImpl(this, bundleId, bleDetectionConfig, context)
 
-    override val analytics: Analytics = AnalyticsImpl(context, novidRepository)
+    override val analytics: Analytics = AnalyticsImpl(novidRepository)
 
-    private val bluetoothManager = BleBluetoothManager(context, novidRepository)
-    private val bleServerManager = BleServerManager(this, context)
+    private val bluetoothManager = BleBluetoothManager(context, bleDetectionConfig, novidRepository)
+    private val bleServerManager = BleServerManager(this, bleDetectionConfig, context)
 
     private val activityManager = NovidActivityManager(context)
     internal val locationManager = NovidLocationManager(this, context)
     private val nearbyMessageManager = NearbyMessagesManager(this)
     private val nearbyConnectionManager = NearbyConnectionsManager(this, context)
 
-    private val beaconManager = NovidBeaconManager(context) {
+    private val beaconManager = NovidBeaconManager(context, bleDetectionConfig) {
         novidRepository.contactDetected(
             userid = it.userId,
             source = TECHNOLOGY_BEACON,
@@ -128,22 +130,19 @@ internal class NovidSdkImpl internal constructor(
     internal val database = NovidDatabase.getDatabase(context)
 
     init {
-        // Load userId if exists, otherwise create new one
-        var configUserId: String? = config.uid
-        if (configUserId.isNullOrBlank()) {
-            Logger.debug(TAG, "UserId doesn't exist, generating a new one.")
-            configUserId = UUID.randomUUID().toString()
-            config.userId = configUserId
-        }
-
+        val configUserId: String? = config.uid
         Logger.debug(TAG, "Initializing NoVidSdk as $configUserId")
 
-        if (config.onboarded && config.enabled) {
+        if (config.onboarded && config.registered && config.enabled) {
             // Start automatic if enabled
             startService()
         } else {
-            Logger.debug(TAG, "Not starting service because user " +
-                    "is not onboarded (${config.onboarded}) or is not enabled (${config.enabled}).")
+            Logger.debug(
+                TAG, "Not starting service because user " +
+                    "is not registered (${config.registered}), " +
+                    "not onboarded (${config.onboarded}) " +
+                    "or is not enabled (${config.enabled})."
+            )
         }
     }
 
@@ -154,6 +153,10 @@ internal class NovidSdkImpl internal constructor(
      * Start the general functionality
      */
     override fun startService() {
+        if (!hasValidInstallation()) {
+            Logger.warn(TAG, "cannnot start service - user has no valid registration")
+        }
+
         Logger.debug(TAG, "startService")
         serviceRunning = true
         startNotification()
@@ -162,7 +165,7 @@ internal class NovidSdkImpl internal constructor(
         // Requires activity permission
         activityManager.start()
 
-        // Start scanning for beacons if required
+        // Start scanning for beacons if required - not yet used
         //beaconManager.startScanning()
 
         // Schedule background analytics events sync worker
@@ -176,6 +179,9 @@ internal class NovidSdkImpl internal constructor(
             val duration = TimeUnit.MINUTES.toMillis(TIMEOUT_INITIAL)
             stopDetectionDelayed(duration)
         }
+
+        // Delete outdated contacts
+        novidRepository.deleteOutdatedContactsAndLocations()
     }
 
     override fun stopService() {
@@ -242,6 +248,10 @@ internal class NovidSdkImpl internal constructor(
         beaconManager.stopScanning()
         bleServerManager.stop()
         bluetoothManager.stopDiscovery()
+    }
+
+    private fun hasValidInstallation(): Boolean {
+        return config.registered && config.onboarded && !config.userId.isNullOrBlank()
     }
 
     override fun isServiceRunning() = serviceRunning

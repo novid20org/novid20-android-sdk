@@ -1,0 +1,159 @@
+---
+format_version: '8'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: android
+trigger_map:
+- push_branch: master
+  workflow: deploy-master
+- push_branch: "*"
+  workflow: primary
+- pull_request_source_branch: "*"
+  workflow: primary
+workflows:
+  primary:
+    steps:
+    - activate-ssh-key@4.0.5:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@4.0.18: {}
+    - cache-pull@2.1.4: {}
+    - install-missing-android-tools@2.3.8:
+        inputs:
+        - gradlew_path: "$PROJECT_LOCATION/gradlew"
+    - change-android-versioncode-and-versionname@1.2.3:
+        inputs:
+        - new_version_name: 1.0.$BITRISE_BUILD_NUMBER
+        - build_gradle_path: "$PROJECT_LOCATION/$MODULE/build.gradle"
+    - gradle-runner@1:
+        title: gradlew assemble
+        inputs:
+        - gradle_file: "./app/build.gradle"
+        - gradlew_path: "./gradlew"
+    - sign-apk@1.4.3:
+        inputs:
+        - android_app: "./app/build/outputs/apk/georgiaDev/release/app-georgia-dev-release-unsigned.apk|./app/build/outputs/apk/georgiaLive/release/app-georgia-live-release-unsigned.apk|./app/build/outputs/apk/novidDev/release/app-novid-dev-release-unsigned.apk|./app/build/outputs/apk/novidLive/release/app-novid-live-release-unsigned.apk"
+    - script@1:
+        title: Move APKs to Bitrise Deploy Dir
+        inputs:
+        - content: |
+            #!/usr/bin/env bash
+            # fail if any commands fails
+            set -e
+            # debug log
+            set -x
+
+            echo "Moving APKs to Bitrise Deploy dir: $BITRISE_DEPLOY_DIR"
+            mv ./app/build/outputs/apk/*/*/*.apk $BITRISE_DEPLOY_DIR
+    - deploy-to-bitrise-io@1.9: {}
+    - cache-push@2.2.3: {}
+    envs:
+    - opts:
+        is_expand: false
+      VARIANT: novidDevDebug
+  deploy-master:
+    description: |
+      ## How to get a signed APK
+
+      This workflow contains the **Sign APK** step. To sign your APK all you have to do is to:
+
+      1. Click on **Code Signing** tab
+      1. Find the **ANDROID KEYSTORE FILE** section
+      1. Click or drop your file on the upload file field
+      1. Fill the displayed 3 input fields:
+       1. **Keystore password**
+       1. **Keystore alias**
+       1. **Private key password**
+      1. Click on **[Save metadata]** button
+
+      That's it! From now on, **Sign APK** step will receive your uploaded files.
+
+      ## To run this workflow
+
+      If you want to run this workflow manually:
+
+      1. Open the app's build list page
+      2. Click on **[Start/Schedule a Build]** button
+      3. Select **deploy** in **Workflow** dropdown input
+      4. Click **[Start Build]** button
+
+      Or if you need this workflow to be started by a GIT event:
+
+      1. Click on **Triggers** tab
+      2. Setup your desired event (push/tag/pull) and select **deploy** workflow
+      3. Click on **[Done]** and then **[Save]** buttons
+
+      The next change in your repository that matches any of your trigger map event will start **deploy** workflow.
+    steps:
+    - activate-ssh-key@4.0.5:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@4.0.18: {}
+    - cache-pull@2.1.4: {}
+    - install-missing-android-tools@2.3.8:
+        inputs:
+        - gradlew_path: "$PROJECT_LOCATION/gradlew"
+    - change-android-versioncode-and-versionname@1.2.3:
+        inputs:
+        - new_version_name: 1.0.$BITRISE_BUILD_NUMBER
+        - build_gradle_path: "$PROJECT_LOCATION/$MODULE/build.gradle"
+    - android-lint@0.9.7:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: "$VARIANT"
+    - android-unit-test@1.0.0:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: "$VARIANT"
+    - android-build@0.10.0:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: "$VARIANT"
+        title: Android Build Novid20
+    - sign-apk@1.4.3:
+        run_if: '{{getenv "BITRISEIO_ANDROID_KEYSTORE_URL" | ne ""}}'
+        title: Android Sign Novid20
+    - firebase-app-distribution@0.6.0:
+        inputs:
+        - app: "$FIREBASE_APP_ID_NOVID"
+        - groups: dolphin-members, novid20, novid20-link
+        - firebase_token: "$FIREBASE_TOKEN"
+        title: Firebase Distribute Novid20
+    - android-build@0.10.0:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: georgiaLiveRelease
+        title: Android Build Goergia
+    - sign-apk@1.4.3:
+        run_if: '{{getenv "BITRISEIO_ANDROID_KEYSTORE_URL" | ne ""}}'
+        title: Android Sign Georgia
+    - firebase-app-distribution@0.6.0:
+        inputs:
+        - app: "$FIREBASE_APP_ID_GEORGIA"
+        - groups: dolphin-members, novid20, novid20-link
+        - firebase_token: "$FIREBASE_TOKEN"
+        title: Firebase Distribute Georgia
+    - deploy-to-bitrise-io@1.9.6: {}
+    - cache-push@2.2.3: {}
+    envs:
+    - opts:
+        is_expand: false
+      VARIANT: novidLiveRelease
+    - opts:
+        is_expand: false
+      FIREBASE_APP_ID_NOVID: 1:441057994010:android:491b10ff9700c12c4578a3
+    - opts:
+        is_expand: false
+      FIREBASE_APP_ID_GEORGIA: 1:441057994010:android:69844fabc4ed569a4578a3
+app:
+  envs:
+  - opts:
+      is_expand: false
+    PROJECT_LOCATION: "."
+  - opts:
+      is_expand: false
+    MODULE: app
+  - opts:
+      is_expand: false
+    VARIANT: novidDevDebug

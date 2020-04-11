@@ -13,11 +13,17 @@ import android.content.Intent
 
 private const val TAG = "NotificationService"
 
+/**
+ * This class is triggered whenever the device boots.
+ * By launching this service, the Application class is also initialized
+ * and the Application class should have the NovidSdk initialization
+ * code in it and will also start the application.
+ */
 class NovidBootReceiver : BroadcastReceiver() {
 
     @SuppressLint("UnsafeProtectedBroadcastReceiver")
     override fun onReceive(context: Context?, intent: Intent?) {
-        Logger.debug(TAG, "onReceive")
+        Logger.debug(TAG, "NovidBootReceiver triggered and Application class initialized.")
     }
 
 }

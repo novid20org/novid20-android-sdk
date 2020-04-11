@@ -30,6 +30,7 @@ import org.novid20.sdk.Logger
  */
 internal class NovidBeaconManager(
     private val context: Context,
+    private val bleDetectionConfig: BleDetectionConfig,
     private val detectionCallback: (NovidBeacon) -> Unit
 ) : BeaconConsumer, MonitorNotifier, RangeNotifier {
 
@@ -39,9 +40,6 @@ internal class NovidBeaconManager(
 
         /** Only beacons with this UUID will be found */
         private const val NOVID_UUID = "4ac8aff8-ed66-4500-af5b-d99ad69ac1ce"
-
-        /** This is the prefix of the user id */
-        private const val NOVID_PREFIX = "nov20-"
     }
 
     private val beaconManager = BeaconManager.getInstanceForApplication(context.applicationContext)
@@ -202,7 +200,7 @@ internal class NovidBeaconManager(
      * the major and minor values of a [Beacon].
      */
     private fun novidUidTransformer(major: Identifier, minor: Identifier): String {
-        return NOVID_PREFIX + major.toInt().toString() + minor.toInt().toString()
+        return bleDetectionConfig.namePrefix + major.toInt().toString() + minor.toInt().toString()
     }
 
     data class NovidBeacon(val userId: String, val rssi: Int)

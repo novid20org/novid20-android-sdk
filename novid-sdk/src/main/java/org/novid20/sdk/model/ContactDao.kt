@@ -7,7 +7,11 @@
 package org.novid20.sdk.model
 
 import androidx.lifecycle.LiveData
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
 
 @Dao
 internal interface ContactDao {
@@ -44,6 +48,12 @@ internal interface ContactDao {
 
     @Delete
     fun delete(contact: ContactEntryEntity?)
+
+    /**
+     * Deletes entries that are older than [timestamp]
+     */
+    @Query("DELETE FROM ContactEntryEntity WHERE time < :timestamp")
+    fun deleteEntriesOlderThan(timestamp: Long): Int
 
     @Query("DELETE FROM ContactEntryEntity")
     fun nukeTable()

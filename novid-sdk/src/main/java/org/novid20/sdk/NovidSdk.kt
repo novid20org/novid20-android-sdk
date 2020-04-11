@@ -13,6 +13,7 @@ import com.google.android.gms.common.util.ProcessUtils
 import org.novid20.sdk.analytics.Analytics
 import org.novid20.sdk.analytics.DeviceDataProvider
 import org.novid20.sdk.api.AuthTokenLoader
+import org.novid20.sdk.ble.BleDetectionConfig
 
 interface NovidSdk {
 
@@ -21,6 +22,10 @@ interface NovidSdk {
     fun getRepository() = sdk?.novidRepository!!
 
     val analytics: Analytics
+
+    val bundleId: String
+
+    val bleDetectionConfig: BleDetectionConfig
 
     val deviceDataProvider: DeviceDataProvider
 
@@ -65,9 +70,17 @@ interface NovidSdk {
         /**
          * This must be called in your [android.app.Application] class.
          */
-        fun initialize(context: Context, accessToken: String, deviceDataProvider: DeviceDataProvider) {
+        fun initialize(context: Context,
+                       accessToken: String,
+                       bundleId: String,
+                       bleDetectionConfig: BleDetectionConfig,
+                       deviceDataProvider: DeviceDataProvider) {
             Logger.debug(TAG, "Initializing NovidSdk.")
-            sdk = NovidSdkImpl(context.applicationContext, deviceDataProvider, accessToken)
+            sdk = NovidSdkImpl(context.applicationContext,
+                accessToken,
+                bundleId,
+                bleDetectionConfig,
+                deviceDataProvider)
         }
     }
 }

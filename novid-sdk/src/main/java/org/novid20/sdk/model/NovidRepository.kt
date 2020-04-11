@@ -41,6 +41,7 @@ interface NovidRepository {
 
     suspend fun saveEvent(name: String, value: String)
 
-    fun nukeData()
+    fun deleteOutdatedContactsAndLocations()
 
+    fun nukeData()
 }

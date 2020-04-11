@@ -33,7 +33,9 @@ import org.novid20.sdk.api.models.VerifyUserRequest
 
 private const val TAG = "NovidClientImpl"
 
-internal class NovidClientImpl(val context: Context, authTokenLoader: AuthTokenLoader) : NovidClient {
+internal class NovidClientImpl(context: Context,
+                               private val bundleId: String,
+                               authTokenLoader: AuthTokenLoader) : NovidClient {
 
     private val client: OkHttpClient
     private val gson: Gson
@@ -63,7 +65,7 @@ internal class NovidClientImpl(val context: Context, authTokenLoader: AuthTokenL
 
         val registerUserRequest = RegisterUserRequest(
             deviceToken = deviceToken,
-            bundleId = context.packageName
+            bundleId = bundleId
         )
 
         val content = gson.toJson(registerUserRequest)
@@ -142,17 +144,15 @@ internal class NovidClientImpl(val context: Context, authTokenLoader: AuthTokenL
         contacts: List<ApiContact>,
         location: List<ApiLocation>
     ): ApiResponse {
-        val bundleId = context.packageName
-
         val current = System.currentTimeMillis()
-        val registerUserRequest = InfectionRequest(
+        val reportInfectionRequest = InfectionRequest(
             bundleId = bundleId,
             timestamp = current,
             contacts = contacts,
             locations = location
         )
 
-        val content = gson.toJson(registerUserRequest)
+        val content = gson.toJson(reportInfectionRequest)
         val body = content.toRequestBody(contentType)
 
         val request: Request = Request.Builder()
@@ -166,7 +166,7 @@ internal class NovidClientImpl(val context: Context, authTokenLoader: AuthTokenL
             .getOrDefault(ApiResponse(status = response.code, message = response.message))
     }
 
-    override fun getStatus(): Status {
+    override fun getStatus(): Status? {
         val request: Request = Request.Builder()
             .url("${baseUrl}/mobile/status")
             .build()
@@ -177,10 +177,10 @@ internal class NovidClientImpl(val context: Context, authTokenLoader: AuthTokenL
             val statusResponse = gson.fromJson(responseBody, GetStatusResponse::class.java)
             val infected = statusResponse.isInfected
             val infectedContactCount = statusResponse.infectedContacts
-            return Status(infected, infectedContactCount)
+            val userId = statusResponse.userId
+            return Status(userId, infected, infectedContactCount)
         }
-
-        return Status(false, 0)
+        return null
     }
 
     override fun submitAnalytics(analyticsRequest: AnalyticsRequest): Boolean {

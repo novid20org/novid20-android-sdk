@@ -9,7 +9,7 @@ This is the source code of the SDK powering the NOVID20 Android apps. Note: This
 More info: [NOVID20.org](https://novid20.org)
 
 ## Authors
-* [Christoph KÃ¼hrer](https://christoph.tech/)
+* [Christoph Kührer](https://christoph.tech/)
 * [Dipl. Ing. Florian Knoll, Bsc.](http://www.mss-knoll.at/)
 
 ## License

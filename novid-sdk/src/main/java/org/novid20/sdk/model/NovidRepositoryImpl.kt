@@ -15,7 +15,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Transformations
-import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
@@ -26,6 +25,7 @@ import org.novid20.sdk.NOTIFICATION_CHANNEL
 import org.novid20.sdk.NovidSDKAnalytics
 import org.novid20.sdk.NovidSdkImpl
 import org.novid20.sdk.R
+import org.novid20.sdk.analytics.EVENT_SIGN_UP
 import org.novid20.sdk.api.NovidClient
 import org.novid20.sdk.api.NovidClientImpl
 import org.novid20.sdk.api.models.AnalyticsEvent
@@ -34,6 +34,7 @@ import org.novid20.sdk.api.models.AnalyticsState
 import org.novid20.sdk.api.models.ApiContact
 import org.novid20.sdk.api.models.ApiLocation
 import org.novid20.sdk.api.models.ApiResponse
+import org.novid20.sdk.ble.BleDetectionConfig
 import org.novid20.sdk.core.Dispatchers
 import org.novid20.sdk.core.DispatchersImpl
 import java.util.concurrent.TimeUnit
@@ -43,13 +44,13 @@ private const val TAG: String = "NovidRepositoryImpl"
 
 internal class NovidRepositoryImpl(
     private val novidSdk: NovidSdkImpl,
+    private val bundleId: String,
+    private val bleDetectionConfig: BleDetectionConfig,
     private val context: Context,
     private val dispatchers: Dispatchers = DispatchersImpl()
 ) : NovidRepository, CoroutineScope {
 
     companion object {
-        internal const val BT_NAME_PREFIX = "nov20-"
-
         const val ERROR_CODE_OTHER = -1
     }
 
@@ -58,7 +59,7 @@ internal class NovidRepositoryImpl(
 
     private val client: NovidClient by lazy {
         NovidClientImpl(
-            context, novidSdk.authTokenLoader
+            context, bundleId, novidSdk.authTokenLoader
                 ?: throw IllegalArgumentException("You have to set an AuthTokenLoader before the NovidSdk can be used.")
         )
     }
@@ -81,7 +82,7 @@ internal class NovidRepositoryImpl(
                         config.userId = userId
                         config.registered = true
 
-                        novidSdk.analytics.sendEvent(FirebaseAnalytics.Event.SIGN_UP)
+                        novidSdk.analytics.sendEvent(EVENT_SIGN_UP)
                     }
                 } catch (t: Throwable) {
                     Logger.error(TAG, t.message, t)
@@ -107,9 +108,10 @@ internal class NovidRepositoryImpl(
 
     override fun contactDetected(userid: String, timestamp: Long, source: String?, rssi: Int?): Boolean {
 
-        if (!userid.startsWith(BT_NAME_PREFIX)) {
+        if (!userid.startsWith(bleDetectionConfig.namePrefix)) {
             // Ignore non nov values
-            Logger.warn(TAG, "Found contact but it's name does not start with \"$BT_NAME_PREFIX\" ($userid)")
+            Logger.warn(TAG, "Found contact but it's name does not " +
+                "start with \"${bleDetectionConfig.namePrefix}\" ($userid)")
             return false
         }
 
@@ -201,8 +203,9 @@ internal class NovidRepositoryImpl(
                 ApiContact(
                     userId = it.user,
                     timestamp = it.time,
-                    duration = it.duration,
+                    duration = it.duration?.div(1000),
                     distance = it.distance,
+                    source = it.source,
                     rssi = it.rssi,
                     background = it.background
                 )
@@ -210,7 +213,7 @@ internal class NovidRepositoryImpl(
             var locations = emptyList<ApiLocation>()
             if (sendLocations) {
                 val locationDao = novidSdk.database.locationDao()
-                locations = locationDao.getAll().map {
+                locations = locationDao.getAll(since).map {
                     ApiLocation(
                         timestamp = it.time,
                         lat = it.latitude,
@@ -270,9 +273,14 @@ internal class NovidRepositoryImpl(
         try {
             val config = novidSdk.config
             val status = client.getStatus()
-            val alertCount = status.infectedContactCount
-            config.infectionConfirmed = status.infected
-            repeat(alertCount) { alerts.add(Alert()) }
+            status?.let {
+                val alertCount = status.infectedContactCount
+                config.infectionConfirmed = status.infected
+                if (!status.userId.isNullOrBlank()) {
+                    config.userId = status.userId
+                }
+                repeat(alertCount) { alerts.add(Alert()) }
+            }
         } catch (t: Throwable) {
             Logger.error(TAG, t.message, t)
         }
@@ -280,10 +288,15 @@ internal class NovidRepositoryImpl(
     }
 
     override fun syncAllAnalyticsData(): Boolean {
+        if (!novidSdk.isServiceRunning()) {
+            // Don't send data if disabled (or user did not accept terms of use)
+            return false
+        }
+
         val analyticsDao = novidSdk.database.analyticsDao()
         val deviceDataProvider = novidSdk.deviceDataProvider ?: throw IllegalStateException(
             "NovidSdk#deviceDataProvider has to be " +
-                    "initialized before syncAllAnalyticsData can be used."
+                "initialized before syncAllAnalyticsData can be used."
         )
 
         // Sync all events
@@ -315,6 +328,23 @@ internal class NovidRepositoryImpl(
             timestamp = System.currentTimeMillis()
         )
         novidSdk.database.analyticsDao().insertAll(event)
+    }
+
+    /**
+     * This function deletes all contacts and locations
+     * that are older than 5 days.
+     */
+    override fun deleteOutdatedContactsAndLocations() {
+        val timestamp = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(5)
+        Logger.debug(TAG, "Deleting contacts and locations created before $timestamp")
+        launch(dispatchers.io) {
+            val deletedContactsCount = novidSdk.database.contactDao().deleteEntriesOlderThan(timestamp)
+            val deletedLocationsCount = novidSdk.database.locationDao().deleteEntriesOlderThan(timestamp)
+            Logger.debug(
+                TAG, "Deleted $deletedContactsCount outdated contacts " +
+                    "and $deletedLocationsCount outdated locations."
+            )
+        }
     }
 
     override fun nukeData() {

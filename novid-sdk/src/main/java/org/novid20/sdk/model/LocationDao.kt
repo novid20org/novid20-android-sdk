@@ -14,11 +14,17 @@ import androidx.room.Query
 @Dao
 internal interface LocationDao {
 
-    @Query("SELECT * FROM LocationEntryEntity ORDER BY time DESC")
-    fun getAll(): List<LocationEntryEntity>
+    @Query("SELECT * FROM LocationEntryEntity WHERE time > :since ORDER BY time DESC")
+    fun getAll(since: Long = 0): List<LocationEntryEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(entry: LocationEntryEntity): Long
+
+    /**
+     * Deletes entries that are older than [timestamp]
+     */
+    @Query("DELETE FROM LocationEntryEntity WHERE time < :timestamp")
+    fun deleteEntriesOlderThan(timestamp: Long): Int
 
     @Query("DELETE FROM LocationEntryEntity")
     fun nukeTable()

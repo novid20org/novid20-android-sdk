@@ -30,12 +30,12 @@ import android.os.ParcelUuid
 import org.novid20.sdk.Logger
 import org.novid20.sdk.NovidSdk
 import org.novid20.sdk.TECHNOLOGY_BLE_SERVER
-import java.util.UUID
 
 private val TAG: String = Logger.makeLogTag("BleServerManager")
 
 internal class BleServerManager(
     private val sdk: NovidSdk,
+    private val bleDetectionConfig: BleDetectionConfig,
     private val context: Context
 ) {
 
@@ -45,11 +45,11 @@ internal class BleServerManager(
     private val registeredDevices = mutableSetOf<BluetoothDevice>()
 
     private val appService = BluetoothGattService(
-        UserIdProfile.APP_SERVICE,
+        bleDetectionConfig.appUuid,
         BluetoothGattService.SERVICE_TYPE_PRIMARY
     )
 
-    val novidService = UserIdProfile.createNovidService()
+    val novidService = UserIdProfile.createNovidService(bleDetectionConfig)
 
     /**
      * Callback to handle incoming requests to the GATT server.
@@ -101,7 +101,7 @@ internal class BleServerManager(
 
             val now = System.currentTimeMillis()
             when {
-                UserIdProfile.USERID_INFO == characteristic.uuid -> {
+                bleDetectionConfig.characteristicUuid == characteristic.uuid -> {
 
                     val userId = NovidSdk.getInstance().getConfig().userId
                     val response = userId?.toByteArray(Charsets.UTF_8)
@@ -111,7 +111,7 @@ internal class BleServerManager(
                         device,
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
-                        0,
+                        offset,
                         response
                     )
                 }
@@ -122,7 +122,7 @@ internal class BleServerManager(
                         device,
                         requestId,
                         BluetoothGatt.GATT_FAILURE,
-                        0,
+                        offset,
                         null
                     )
                 }
@@ -138,17 +138,12 @@ internal class BleServerManager(
                 device,
                 requestId,
                 BluetoothGatt.GATT_FAILURE,
-                0, null
+                offset, null
             )
         }
     }
 
     fun start() {
-
-        val userId = sdk.getConfig().userId
-        // nov20-661034869758062
-        val first = userId!!.substring(6, 6 + 4) // cut of "nov20-"
-        val second = userId.substring(6 + 4, userId.length)
 
         bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter
@@ -209,7 +204,7 @@ internal class BleServerManager(
             val data = AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(true)
-                .addServiceUuid(ParcelUuid(UserIdProfile.APP_SERVICE))
+                .addServiceUuid(ParcelUuid(bleDetectionConfig.appUuid))
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

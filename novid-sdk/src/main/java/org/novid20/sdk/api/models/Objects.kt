@@ -7,6 +7,7 @@
 package org.novid20.sdk.api.models
 
 internal data class Status(
+    val userId: String,
     val infected: Boolean,
     val infectedContactCount: Int
 )
@@ -14,10 +15,11 @@ internal data class Status(
 internal data class ApiContact(
     val userId: String,
     val timestamp: Long,
-    val duration: Long? = null,
+    val duration: Long? = null, // seconds
     val distance: Int? = null,
     val rssi: Int? = null,
-    val background: Boolean = false
+    val source: String? = null,
+    val background: Boolean? = null
 )
 
 internal data class ApiLocation(

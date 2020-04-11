@@ -23,12 +23,7 @@ object FormattingUtils {
         val numeric = phone.replace(Regex("[^0-9]"), "")
 
         // Removes all leading zeroes. e.g. from ->0<-6766475826 or ->00<-436769475645
-        var noLeadingZeroes = numeric.replace(Regex("^0+"), "")
-
-        if (noLeadingZeroes.startsWith(countryCode.toString(), true)) {
-            // Remove leading country code,  eg. ->43<-660123456 to 66012345
-            noLeadingZeroes = noLeadingZeroes.replaceFirst(countryCode.toString(), "", true)
-        }
+        val noLeadingZeroes = numeric.replace(Regex("^0+"), "")
 
         return (countryCode.toString() + noLeadingZeroes).also {
             Logger.debug(TAG, "Normalized phone number: $it")

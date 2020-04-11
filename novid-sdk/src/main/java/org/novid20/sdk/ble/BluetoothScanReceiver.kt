@@ -16,7 +16,7 @@ import org.novid20.sdk.Logger
 import org.novid20.sdk.NovidSdk
 import org.novid20.sdk.TECHNOLOGY_BLUETOOTH
 
-internal class BluetoothScanReceiver : BroadcastReceiver() {
+internal class BluetoothScanReceiver(private val bleDetectionConfig: BleDetectionConfig) : BroadcastReceiver() {
 
     private val TAG = Logger.makeLogTag(this@BluetoothScanReceiver.javaClass)
 
@@ -24,20 +24,20 @@ internal class BluetoothScanReceiver : BroadcastReceiver() {
         val action = intent.action
         val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
         if (BluetoothDevice.ACTION_FOUND == action) {
-            val name = device.name
-            val address = device.address
+            val name = device?.name
+            val address = device?.address
             Logger.verbose(TAG, "Device found $name $address")
-            onDeviceFound(context, intent)
+            onDeviceFound(intent)
         } else if (BluetoothDevice.ACTION_BOND_STATE_CHANGED == action) {
-            val name = device.name
-            val address = device.address
+            val name = device?.name
+            val address = device?.address
             Logger.verbose(TAG, "Device bond changed $name $address")
-            onBondChanged(context, intent)
+            onBondChanged(intent)
         } else if (BluetoothDevice.ACTION_ACL_CONNECTED == action) {
-            val name = device.name
-            val address = device.address
+            val name = device?.name
+            val address = device?.address
             Logger.verbose(TAG, "Device is now connected $name $address")
-            onConnected(context, intent)
+            onConnected(intent)
         } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED == action) {
             Logger.verbose(TAG, "Done searching")
         } else if (BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED == action) {
@@ -47,32 +47,30 @@ internal class BluetoothScanReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun onConnected(context: Context, intent: Intent) {
-        trackResult(context, intent)
+    private fun onConnected(intent: Intent) {
+        trackResult(intent)
     }
 
-    private fun onBondChanged(context: Context, intent: Intent) {
-        trackResult(context, intent)
+    private fun onBondChanged(intent: Intent) {
+        trackResult(intent)
     }
 
-    private fun onDeviceFound(context: Context, intent: Intent) {
-        trackResult(context, intent)
+    private fun onDeviceFound(intent: Intent) {
+        trackResult(intent)
     }
 
     /**
      * Store the result to local database
      * @param intent
      */
-    private fun trackResult(context: Context, intent: Intent) {
+    private fun trackResult(intent: Intent) {
         val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
         if (device != null) {
             val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
-            val address: String? = device.address
             val deviceName: String? = device.name
-            val bondState: Int? = device.bondState
 
             val novidRepository = NovidSdk.getInstance().getRepository()
-            if (deviceName?.isNotBlank() == true) {
+            if (deviceName?.startsWith(bleDetectionConfig.namePrefix) == true) {
                 Logger.debug(TAG, "Bluetooth: $deviceName rssi:$rssi")
                 novidRepository.contactDetected(deviceName, source = TECHNOLOGY_BLUETOOTH, rssi = rssi)
             }

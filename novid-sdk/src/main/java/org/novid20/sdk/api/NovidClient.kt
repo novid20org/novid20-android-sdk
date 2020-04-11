@@ -27,7 +27,7 @@ internal interface NovidClient {
         location: List<ApiLocation>
     ): ApiResponse
 
-    fun getStatus(): Status
+    fun getStatus(): Status?
 
     fun submitAnalytics(analyticsRequest: AnalyticsRequest): Boolean
 }

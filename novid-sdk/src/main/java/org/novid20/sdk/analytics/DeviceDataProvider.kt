@@ -9,9 +9,10 @@ package org.novid20.sdk.analytics
 import org.novid20.sdk.model.AnalyticsStateEntry
 
 interface DeviceDataProvider {
+
     fun getAppVersion(): String
 
-    fun getBuildNumber(): Int
+    fun getBuildNumber(): Long
 
     fun getStates(): List<AnalyticsStateEntry>
 }

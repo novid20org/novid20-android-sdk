@@ -10,7 +10,6 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattServer
 import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
@@ -30,12 +29,13 @@ import android.os.ParcelUuid
 import org.novid20.sdk.Logger
 import org.novid20.sdk.NovidSdk
 import org.novid20.sdk.TECHNOLOGY_BLE_SERVER
+import org.novid20.sdk.model.NovidRepository
 
 private val TAG: String = Logger.makeLogTag("BleServerManager")
 
 internal class BleServerManager(
-    private val sdk: NovidSdk,
-    private val bleDetectionConfig: BleDetectionConfig,
+    private val repo: NovidRepository,
+    private val bleConfig: BleConfig,
     private val context: Context
 ) {
 
@@ -45,11 +45,11 @@ internal class BleServerManager(
     private val registeredDevices = mutableSetOf<BluetoothDevice>()
 
     private val appService = BluetoothGattService(
-        bleDetectionConfig.appUuid,
+        bleConfig.appUuid,
         BluetoothGattService.SERVICE_TYPE_PRIMARY
     )
 
-    val novidService = UserIdProfile.createNovidService(bleDetectionConfig)
+    val novidService = UserIdProfile.createNovidService(bleConfig)
 
     /**
      * Callback to handle incoming requests to the GATT server.
@@ -59,25 +59,21 @@ internal class BleServerManager(
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Logger.info(TAG, "BluetoothDevice CONNECTED: $device")
+                Logger.info(TAG, "BluetoothDevice CONNECTED: $device (status=$status)")
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Logger.info(TAG, "BluetoothDevice DISCONNECTED: $device")
+                Logger.info(TAG, "BluetoothDevice DISCONNECTED: $device (status=$status)")
                 //Remove device from any active subscriptions
                 registeredDevices.remove(device)
             } else {
-                Logger.info(TAG, "newState: $newState")
+                Logger.info(TAG, "Unhandled BluetoothDevice state change for state: $newState")
             }
-            trackResult(context, device)
+            trackResult(device)
         }
 
-        private fun trackResult(context: Context, device: BluetoothDevice) {
-            val address: String? = device.address
+        private fun trackResult(device: BluetoothDevice) {
             val deviceName: String? = device.name
-            val bondState: Int? = device.bondState
-
-            val novidRepository = NovidSdk.getInstance().getRepository()
-            if (deviceName?.isNotBlank() == true) {
-                novidRepository.contactDetected(deviceName, source = TECHNOLOGY_BLE_SERVER)
+            if (!deviceName.isNullOrBlank()) {
+                repo.contactDetected(deviceName, source = TECHNOLOGY_BLE_SERVER)
             }
         }
 
@@ -92,6 +88,11 @@ internal class BleServerManager(
             }
         }
 
+        override fun onMtuChanged(device: BluetoothDevice?, mtu: Int) {
+            super.onMtuChanged(device, mtu)
+            Logger.verbose(TAG, "onMtuChanged $mtu")
+        }
+
         override fun onCharacteristicReadRequest(
             device: BluetoothDevice,
             requestId: Int,
@@ -101,19 +102,29 @@ internal class BleServerManager(
 
             val now = System.currentTimeMillis()
             when {
-                bleDetectionConfig.characteristicUuid == characteristic.uuid -> {
+                bleConfig.characteristicUuid == characteristic.uuid -> {
 
                     val userId = NovidSdk.getInstance().getConfig().userId
-                    val response = userId?.toByteArray(Charsets.UTF_8)
 
-                    Logger.verbose(TAG, "Read UserId")
-                    bluetoothGattServer?.sendResponse(
-                        device,
-                        requestId,
-                        BluetoothGatt.GATT_SUCCESS,
-                        offset,
-                        response
-                    )
+                    if (offset >= userId!!.length) {
+                        bluetoothGattServer?.sendResponse(
+                            device,
+                            requestId,
+                            BluetoothGatt.GATT_INVALID_OFFSET,
+                            offset,
+                            null
+                        )
+                    } else {
+                        val response = userId.substring(offset).toByteArray(Charsets.UTF_8)
+                        Logger.verbose(TAG, "Read UserId with offset $offset")
+                        bluetoothGattServer?.sendResponse(
+                            device,
+                            requestId,
+                            BluetoothGatt.GATT_SUCCESS,
+                            offset,
+                            response
+                        )
+                    }
                 }
                 else -> {
                     // Invalid characteristic
@@ -127,19 +138,6 @@ internal class BleServerManager(
                     )
                 }
             }
-        }
-
-        override fun onDescriptorReadRequest(
-            device: BluetoothDevice, requestId: Int, offset: Int,
-            descriptor: BluetoothGattDescriptor
-        ) {
-            Logger.warn(TAG, "Unknown descriptor read request")
-            bluetoothGattServer?.sendResponse(
-                device,
-                requestId,
-                BluetoothGatt.GATT_FAILURE,
-                offset, null
-            )
         }
     }
 
@@ -204,7 +202,7 @@ internal class BleServerManager(
             val data = AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(true)
-                .addServiceUuid(ParcelUuid(bleDetectionConfig.appUuid))
+                .addServiceUuid(ParcelUuid(bleConfig.appUuid))
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

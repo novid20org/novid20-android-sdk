@@ -11,7 +11,7 @@ import androidx.lifecycle.LiveData
 
 interface NovidRepository {
 
-    fun register(uid: String, authToken: String, deviceToken: String)
+    suspend fun register(uid: String, authToken: String, deviceToken: String): Boolean
 
     fun updateDeviceToken(uid: String, deviceToken: String)
 

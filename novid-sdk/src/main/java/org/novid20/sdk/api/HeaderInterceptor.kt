@@ -33,6 +33,7 @@ internal class HeaderInterceptor(
         val oldRequest = chain.request()
         val novidSdk = NovidSdk.getInstance()
         val config = novidSdk.getConfig()
+
         val accessToken = config.accessToken
         val newRequest = oldRequest.newBuilder().addNovidHeaders(config.uid, config.authToken, accessToken).build()
         val response = chain.proceed(newRequest)

@@ -12,11 +12,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import org.novid20.sdk.DetectionConfig
 import org.novid20.sdk.Logger
 import org.novid20.sdk.NovidSdk
 import org.novid20.sdk.TECHNOLOGY_BLUETOOTH
+import org.novid20.sdk.utils.Extensions.isValidNovidUserId
 
-internal class BluetoothScanReceiver(private val bleDetectionConfig: BleDetectionConfig) : BroadcastReceiver() {
+internal class BluetoothScanReceiver(private val detectionConfig: DetectionConfig) : BroadcastReceiver() {
 
     private val TAG = Logger.makeLogTag(this@BluetoothScanReceiver.javaClass)
 
@@ -70,7 +72,7 @@ internal class BluetoothScanReceiver(private val bleDetectionConfig: BleDetectio
             val deviceName: String? = device.name
 
             val novidRepository = NovidSdk.getInstance().getRepository()
-            if (deviceName?.startsWith(bleDetectionConfig.namePrefix) == true) {
+            if (deviceName?.isValidNovidUserId(detectionConfig) == true) {
                 Logger.debug(TAG, "Bluetooth: $deviceName rssi:$rssi")
                 novidRepository.contactDetected(deviceName, source = TECHNOLOGY_BLUETOOTH, rssi = rssi)
             }

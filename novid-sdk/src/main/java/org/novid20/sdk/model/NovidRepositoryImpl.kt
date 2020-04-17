@@ -20,6 +20,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.novid20.sdk.BuildConfigHelper
+import org.novid20.sdk.DetectionConfig
 import org.novid20.sdk.Logger
 import org.novid20.sdk.NOTIFICATION_CHANNEL
 import org.novid20.sdk.NovidSDKAnalytics
@@ -37,6 +38,7 @@ import org.novid20.sdk.api.models.ApiResponse
 import org.novid20.sdk.ble.BleDetectionConfig
 import org.novid20.sdk.core.Dispatchers
 import org.novid20.sdk.core.DispatchersImpl
+import org.novid20.sdk.utils.Extensions.isValidNovidUserId
 import java.util.concurrent.TimeUnit
 
 
@@ -45,7 +47,7 @@ private const val TAG: String = "NovidRepositoryImpl"
 internal class NovidRepositoryImpl(
     private val novidSdk: NovidSdkImpl,
     private val bundleId: String,
-    private val bleDetectionConfig: BleDetectionConfig,
+    private val detectionConfig: DetectionConfig,
     private val context: Context,
     private val dispatchers: Dispatchers = DispatchersImpl()
 ) : NovidRepository, CoroutineScope {
@@ -64,31 +66,33 @@ internal class NovidRepositoryImpl(
         )
     }
 
-    override fun register(uid: String, authToken: String, deviceToken: String) {
+    override suspend fun register(uid: String, authToken: String, deviceToken: String): Boolean {
         Logger.debug(TAG, "Register user: $uid")
         val config = novidSdk.config
 
         val registered = config.registered
-
         if (!registered) {
-            GlobalScope.launch {
-                try {
-                    config.deviceToken = deviceToken
-                    config.authToken = authToken
-                    config.uid = uid
+            try {
+                config.deviceToken = deviceToken
+                config.authToken = authToken
+                config.uid = uid
 
-                    val userId = client.registerUser(deviceToken)
-                    if (!userId.isNullOrBlank()) {
-                        config.userId = userId
-                        config.registered = true
+                val userId = client.registerUser(deviceToken)
+                if (!userId.isNullOrBlank()) {
+                    config.userId = userId
+                    config.registered = true
 
-                        novidSdk.analytics.sendEvent(EVENT_SIGN_UP)
-                    }
-                } catch (t: Throwable) {
-                    Logger.error(TAG, t.message, t)
+                    novidSdk.analytics.sendEvent(EVENT_SIGN_UP)
+                    return true
                 }
+            } catch (t: Throwable) {
+                Logger.error(TAG, t.message, t)
             }
+        } else {
+            // Already registered...
+            return true
         }
+        return false
     }
 
     override fun updateDeviceToken(uid: String, deviceToken: String) {
@@ -108,15 +112,8 @@ internal class NovidRepositoryImpl(
 
     override fun contactDetected(userid: String, timestamp: Long, source: String?, rssi: Int?): Boolean {
 
-        if (!userid.startsWith(bleDetectionConfig.namePrefix)) {
-            // Ignore non nov values
-            Logger.warn(TAG, "Found contact but it's name does not " +
-                "start with \"${bleDetectionConfig.namePrefix}\" ($userid)")
-            return false
-        }
-
-        if (userid.length > 30) {
-            Logger.warn(TAG, "Found contact but was too long ($userid)")
+        if (!userid.isValidNovidUserId(detectionConfig)) {
+            Logger.warn(TAG, "Found contact but the name does not match this detectionConfig.")
             return false
         }
 
@@ -162,6 +159,7 @@ internal class NovidRepositoryImpl(
 
     private fun newContactDetected(userid: String, timestamp: Long, source: String?) {
         Logger.debug(TAG, "new contact detected: $userid")
+        novidSdk.analytics.sendEvent(NovidSDKAnalytics.EVENT_CONTACT, userid)
 
         if (BuildConfigHelper.DEBUG) {
             val contentTitle = context.getString(R.string.notification_title)
@@ -181,7 +179,6 @@ internal class NovidRepositoryImpl(
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(userid.hashCode(), notification)
 
-            novidSdk.analytics.sendEvent(NovidSDKAnalytics.EVENT_CONTACT, userid)
         }
     }
 

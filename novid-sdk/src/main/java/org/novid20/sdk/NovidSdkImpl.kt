@@ -27,12 +27,13 @@ import org.novid20.sdk.NovidSDKAnalytics.Companion.EVENT_SERVICE_OFF
 import org.novid20.sdk.NovidSDKAnalytics.Companion.EVENT_SERVICE_ON
 import org.novid20.sdk.activity.NovidActivityManager
 import org.novid20.sdk.analytics.Analytics
-import org.novid20.sdk.analytics.AnalyticsImpl
 import org.novid20.sdk.analytics.AnalyticsSyncWorker
+import org.novid20.sdk.analytics.AppAnalytics
 import org.novid20.sdk.analytics.DeviceDataProvider
+import org.novid20.sdk.analytics.SdkAnalyticsImpl
 import org.novid20.sdk.api.AuthTokenLoader
 import org.novid20.sdk.ble.BleBluetoothManager
-import org.novid20.sdk.ble.BleDetectionConfig
+import org.novid20.sdk.ble.BleConfig
 import org.novid20.sdk.ble.BleServerManager
 import org.novid20.sdk.ble.NovidBeaconManager
 import org.novid20.sdk.core.CountdownThreadHandler
@@ -65,24 +66,26 @@ internal class NovidSdkImpl internal constructor(
     val context: Context,
     private val sdkAccessToken: String,
     override val bundleId: String,
-    override val bleDetectionConfig: BleDetectionConfig,
-    override val deviceDataProvider: DeviceDataProvider
+    override val detectionConfig: DetectionConfig,
+    override val bleConfig: BleConfig,
+    override val deviceDataProvider: DeviceDataProvider,
+    override val appAnalytics: AppAnalytics?
 ) : NovidSdk {
 
     override var authTokenLoader: AuthTokenLoader? = null
-    var novidRepository: NovidRepository = NovidRepositoryImpl(this, bundleId, bleDetectionConfig, context)
+    var novidRepository: NovidRepository = NovidRepositoryImpl(this, bundleId, detectionConfig, context)
 
-    override val analytics: Analytics = AnalyticsImpl(novidRepository)
+    override val analytics: Analytics = SdkAnalyticsImpl(novidRepository, appAnalytics)
 
-    private val bluetoothManager = BleBluetoothManager(context, bleDetectionConfig, novidRepository)
-    private val bleServerManager = BleServerManager(this, bleDetectionConfig, context)
+    private val bluetoothManager = BleBluetoothManager(context, detectionConfig, bleConfig, novidRepository)
+    private val bleServerManager = BleServerManager(novidRepository, bleConfig, context)
 
     private val activityManager = NovidActivityManager(context)
     internal val locationManager = NovidLocationManager(this, context)
     private val nearbyMessageManager = NearbyMessagesManager(this)
     private val nearbyConnectionManager = NearbyConnectionsManager(this, context)
 
-    private val beaconManager = NovidBeaconManager(context, bleDetectionConfig) {
+    private val beaconManager = NovidBeaconManager(context, detectionConfig) {
         novidRepository.contactDetected(
             userid = it.userId,
             source = TECHNOLOGY_BEACON,
@@ -293,7 +296,11 @@ internal class NovidSdkImpl internal constructor(
     private var googleApiClient: GoogleApiClient? = null
 
     override fun configure(activity: FragmentActivity) {
-        buildGoogleApiClient(activity)
+        //buildGoogleApiClient(activity)
+
+        if (config.onboarded && config.enabled) {
+            startService()
+        }
     }
 
     /**

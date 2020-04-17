@@ -16,7 +16,8 @@ import org.novid20.sdk.model.NovidRepository
 const val EVENT_SCREEN_VIEW = "screen_view"
 const val EVENT_SIGN_UP = "sign_up"
 
-internal class AnalyticsImpl(private val repository: NovidRepository) : Analytics {
+internal class SdkAnalyticsImpl(private val repository: NovidRepository,
+                                private val appAnalytics: AppAnalytics?) : Analytics {
 
     companion object {
         private const val TAG = "AnalyticsImpl"
@@ -26,13 +27,13 @@ internal class AnalyticsImpl(private val repository: NovidRepository) : Analytic
         Logger.debug(TAG, "Logging screen view for screen: $screenName")
 
         GlobalScope.launch { repository.saveEvent(EVENT_SCREEN_VIEW, screenName) }
+        appAnalytics?.sendScreenView(activity, screenName)
     }
 
     override fun sendEvent(event: String, value: String?) {
-        val bundle = Bundle().apply { putString("value", value) }
-        Logger.debug(TAG, "Logging event $event with data $bundle")
-
+        Logger.debug(TAG, "Logging event $event with value $value")
         GlobalScope.launch { repository.saveEvent(event, value.orEmpty()) }
+        appAnalytics?.sendEvent(event, value)
     }
 
 }

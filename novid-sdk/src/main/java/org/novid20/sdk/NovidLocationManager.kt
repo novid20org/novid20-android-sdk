@@ -43,11 +43,19 @@ internal class NovidLocationManager(
                 context, Manifest.permission.ACCESS_FINE_LOCATION
             )
             if (checkSelfPermission == PackageManager.PERMISSION_GRANTED) {
-                locationManager.requestSingleUpdate(
-                    LocationManager.GPS_PROVIDER,
-                    SingleLocationListener(LocationRepositoryImpl(sdk)),
-                    Looper.myLooper()
-                )
+                try {
+                    locationManager.requestSingleUpdate(
+                        LocationManager.GPS_PROVIDER,
+                        SingleLocationListener(LocationRepositoryImpl(sdk)),
+                        Looper.myLooper()
+                    )
+                } catch (t: IllegalArgumentException) {
+                    Logger.error(TAG, t.message, t)
+                    /**
+                     * Caused by java.lang.IllegalArgumentException
+                     * provider doesn't exist: gps
+                     */
+                }
             }
         }
     }

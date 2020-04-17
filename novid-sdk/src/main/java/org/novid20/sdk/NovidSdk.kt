@@ -11,9 +11,12 @@ import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import com.google.android.gms.common.util.ProcessUtils
 import org.novid20.sdk.analytics.Analytics
+import org.novid20.sdk.analytics.AppAnalytics
 import org.novid20.sdk.analytics.DeviceDataProvider
+import org.novid20.sdk.analytics.DeviceDataProviderImpl
 import org.novid20.sdk.api.AuthTokenLoader
-import org.novid20.sdk.ble.BleDetectionConfig
+import org.novid20.sdk.ble.BleConfig
+import org.novid20.sdk.ble.DEFAULT_BLE_CONFIG
 
 interface NovidSdk {
 
@@ -25,9 +28,13 @@ interface NovidSdk {
 
     val bundleId: String
 
-    val bleDetectionConfig: BleDetectionConfig
+    val bleConfig: BleConfig
+
+    val detectionConfig: DetectionConfig
 
     val deviceDataProvider: DeviceDataProvider
+
+    val appAnalytics: AppAnalytics?
 
     var authTokenLoader: AuthTokenLoader?
 
@@ -62,25 +69,33 @@ interface NovidSdk {
         fun getInstance(): NovidSdk {
             return sdk ?: throw IllegalStateException(
                 "NovidSdk is not initialized " +
-                        "in this process ${ProcessUtils.getMyProcessName()}. " +
-                        "Make sure to call NovidSdk.initialize(Context) first."
+                    "in this process ${ProcessUtils.getMyProcessName()}. " +
+                    "Make sure to call NovidSdk.initialize(Context) first."
             )
         }
 
         /**
          * This must be called in your [android.app.Application] class.
          */
-        fun initialize(context: Context,
-                       accessToken: String,
-                       bundleId: String,
-                       bleDetectionConfig: BleDetectionConfig,
-                       deviceDataProvider: DeviceDataProvider) {
+        fun initialize(
+            context: Context,
+            accessToken: String,
+            bundleId: String = context.packageName,
+            detectionConfig: DetectionConfig = DEFAULT_DETECTION_CONFIG,
+            bleConfig: BleConfig = DEFAULT_BLE_CONFIG,
+            deviceDataProvider: DeviceDataProvider = DeviceDataProviderImpl(context),
+            appAnalytics: AppAnalytics? = null
+        ) {
             Logger.debug(TAG, "Initializing NovidSdk.")
-            sdk = NovidSdkImpl(context.applicationContext,
+            sdk = NovidSdkImpl(
+                context.applicationContext,
                 accessToken,
                 bundleId,
-                bleDetectionConfig,
-                deviceDataProvider)
+                detectionConfig,
+                bleConfig,
+                deviceDataProvider,
+                appAnalytics
+            )
         }
     }
 }

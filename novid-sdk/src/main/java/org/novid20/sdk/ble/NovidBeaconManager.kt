@@ -18,6 +18,7 @@ import org.altbeacon.beacon.Identifier
 import org.altbeacon.beacon.MonitorNotifier
 import org.altbeacon.beacon.RangeNotifier
 import org.altbeacon.beacon.Region
+import org.novid20.sdk.DetectionConfig
 import org.novid20.sdk.Logger
 
 /**
@@ -30,7 +31,7 @@ import org.novid20.sdk.Logger
  */
 internal class NovidBeaconManager(
     private val context: Context,
-    private val bleDetectionConfig: BleDetectionConfig,
+    private val detectionConfig: DetectionConfig,
     private val detectionCallback: (NovidBeacon) -> Unit
 ) : BeaconConsumer, MonitorNotifier, RangeNotifier {
 
@@ -200,7 +201,7 @@ internal class NovidBeaconManager(
      * the major and minor values of a [Beacon].
      */
     private fun novidUidTransformer(major: Identifier, minor: Identifier): String {
-        return bleDetectionConfig.namePrefix + major.toInt().toString() + minor.toInt().toString()
+        return detectionConfig.namePrefix + major.toInt().toString() + minor.toInt().toString()
     }
 
     data class NovidBeacon(val userId: String, val rssi: Int)

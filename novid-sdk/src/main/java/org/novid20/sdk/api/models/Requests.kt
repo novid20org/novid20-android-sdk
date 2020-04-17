@@ -37,7 +37,7 @@ internal data class AnalyticsRequest(
     val os: String,
     val osVersion: String,
     val appVersion: String,
-    val buildNumber: Int,
+    val buildNumber: Long,
     val deviceModel: String,
     val states: List<AnalyticsState>,
     val events: List<AnalyticsEvent>

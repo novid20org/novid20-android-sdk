@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
@@ -18,12 +19,13 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
+import org.novid20.sdk.DetectionConfig
 import org.novid20.sdk.Logger
 import org.novid20.sdk.TECHNOLOGY_BLE_CACHE
 import org.novid20.sdk.TECHNOLOGY_BLE_CLIENT
 import org.novid20.sdk.TECHNOLOGY_BLE_NAME
+import org.novid20.sdk.utils.Extensions.isValidNovidUserId
 import org.novid20.sdk.model.NovidRepository
-import org.novid20.sdk.model.NovidRepositoryImpl
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
@@ -37,16 +39,17 @@ private const val MANUFACTURER_APPLE = 0x004C
 
 internal class BleBluetoothManager(
     private val context: Context,
-    private val bleDetectionConfig: BleDetectionConfig,
+    private val detectionConfig: DetectionConfig,
+    private val bleConfig: BleConfig,
     repo: NovidRepository
 ) {
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
-    private val scanCallback = BleScanCallback(bleDetectionConfig, repo)
+    private val scanCallback = BleScanCallback(detectionConfig, bleConfig, repo)
 
     init {
-        BluetoothScanReceiver(bleDetectionConfig).apply {
+        BluetoothScanReceiver(detectionConfig).apply {
             register(context)
         }
     }
@@ -62,7 +65,7 @@ internal class BleBluetoothManager(
 
 
         val builder = ScanFilter.Builder()
-        builder.setServiceUuid(ParcelUuid(bleDetectionConfig.appUuid))
+        builder.setServiceUuid(ParcelUuid(bleConfig.appUuid))
         // Filter is not working for IOS Background advertising
         //scanFilters.add(builder.build())
 
@@ -82,7 +85,7 @@ internal class BleBluetoothManager(
         bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
     }
 
-    class GattCallback(private val bleDetectionConfig: BleDetectionConfig,
+    class GattCallback(private val bleConfig: BleConfig,
                        private val repo: NovidRepository) : BluetoothGattCallback() {
 
         private val TAG: String = Logger.makeLogTag("GattCallback")
@@ -121,9 +124,18 @@ internal class BleBluetoothManager(
                 }
             }
 
+            requestCharacteristicsRead(gatt)
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            super.onMtuChanged(gatt, mtu, status)
+            Logger.verbose(TAG, "onMtuChanged$mtu")
+        }
+
+        private fun requestCharacteristicsRead(gatt: BluetoothGatt?) {
             val characteristic = gatt
-                ?.getService(bleDetectionConfig.serviceUuid)
-                ?.getCharacteristic(bleDetectionConfig.characteristicUuid)
+                ?.getService(bleConfig.serviceUuid)
+                ?.getCharacteristic(bleConfig.characteristicUuid)
 
             characteristic?.let {
                 gatt.readCharacteristic(it)
@@ -135,6 +147,11 @@ internal class BleBluetoothManager(
                 }
                 gatt?.disconnect()
             }
+        }
+
+        override fun onDescriptorRead(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
+            super.onDescriptorRead(gatt, descriptor, status)
+            Logger.verbose(TAG, "onDescriptorRead")
         }
 
         override fun onCharacteristicRead(
@@ -180,10 +197,13 @@ internal class BleBluetoothManager(
         }
     }
 
-    class BleScanCallback(private val bleDetectionConfig: BleDetectionConfig,
-                          private val repo: NovidRepository) : ScanCallback() {
+    class BleScanCallback(
+        private val detectionConfig: DetectionConfig,
+        private val bleConfig: BleConfig,
+        private val repo: NovidRepository
+    ) : ScanCallback() {
 
-        private val gattCallback = GattCallback(bleDetectionConfig, repo)
+        private val gattCallback = GattCallback(bleConfig, repo)
 
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
@@ -202,7 +222,8 @@ internal class BleBluetoothManager(
 
             if (!results.isNullOrEmpty()) {
                 Logger.verbose(TAG, "onBatchScanResults")
-                for (result in results.distinctBy { it.device.address }) {
+                val distinctResults = results.distinctBy { it.device.address }
+                for (result in distinctResults) {
                     scanResultReceived(result)
                 }
             }
@@ -218,7 +239,15 @@ internal class BleBluetoothManager(
 
             val rssi = result?.rssi
             val bytes = scanRecord?.bytes
-            val appleMsd = scanRecord?.getManufacturerSpecificData(MANUFACTURER_APPLE)
+
+
+            val appleMsd = scanRecord?.manufacturerSpecificData?.let {
+                // Requires additional null check due to:
+                // Fatal Exception: java.lang.NullPointerException
+                //Attempt to invoke virtual method 'java.lang.Object android.util.SparseArray.get(int)' on a null object reference
+                // Happens with Android 8 / Nexus 5X
+                scanRecord.getManufacturerSpecificData(MANUFACTURER_APPLE)
+            }
 
             Logger.verbose(TAG, "BLE Result: $deviceName rssi:$rssi address:$deviceAddress ${bytes?.joinToString()}")
 
@@ -229,10 +258,10 @@ internal class BleBluetoothManager(
             }
 
             val validUuids = uuids?.filter {
-                it.uuid.toString() == bleDetectionConfig.appUuid.toString()
+                it.uuid.toString() == bleConfig.appUuid.toString()
             }
             if (!validUuids.isNullOrEmpty()) {
-                if (deviceName?.startsWith(bleDetectionConfig.namePrefix) == true) {
+                if (deviceName?.isValidNovidUserId(detectionConfig) == true) {
                     Logger.debug(TAG, "Found iOS: $deviceName $deviceAddress rssi:$rssi")
                     // IOS Case
                     deviceName.let { repo.contactDetected(it, source = TECHNOLOGY_BLE_NAME, rssi = rssi) }
@@ -250,7 +279,7 @@ internal class BleBluetoothManager(
                         connectTo(device)
                     } else if (diff > TimeUnit.SECONDS.toMillis(30)) {  // only report every x seconds
                         val userId = deviceMap[deviceAddress]
-                        if (userId?.startsWith(bleDetectionConfig.namePrefix) == true) {
+                        if (userId?.startsWith(detectionConfig.namePrefix) == true) {
                             deviceAddress?.let { foundAddressMap[deviceAddress] = current }
                             userId.let { id ->
                                 repo.contactDetected(
@@ -262,12 +291,12 @@ internal class BleBluetoothManager(
                         }
                     }
                 }
-            } else if (deviceName?.startsWith(bleDetectionConfig.namePrefix) == true) {
+            } else if (deviceName?.isValidNovidUserId(detectionConfig) == true) {
                 Logger.debug(TAG, "Found iOS Background: $deviceName $deviceAddress rssi:$rssi")
                 deviceName.let { repo.contactDetected(it, source = TECHNOLOGY_BLE_NAME, rssi = rssi) }
             } else {
                 val isInCache = deviceAddress?.let { deviceMap.contains(it) ?: false }
-                
+
                 // Only connect to third party device if the device has a manufacturer data entry
                 // from Apple in order to detect background iOS devices.
                 if (isInCache == false && appleMsd != null) {
@@ -277,7 +306,7 @@ internal class BleBluetoothManager(
                     connectTo(device)
                 } else {
                     val userId = deviceMap[deviceAddress]
-                    if (userId?.startsWith(bleDetectionConfig.namePrefix) == true) {
+                    if (userId?.startsWith(detectionConfig.namePrefix) == true) {
                         val current = System.currentTimeMillis()
                         deviceAddress?.let { foundAddressMap[deviceAddress] = current }
                         userId.let { id ->
@@ -294,9 +323,11 @@ internal class BleBluetoothManager(
 
         private fun connectTo(device: BluetoothDevice) {
             val deviceAddress = device.address
+            val deviceName = device.name
             if (!gattCallback.connecting) {
                 gattCallback.connecting = true
 
+                Logger.debug(TAG, "Connect to $deviceName $deviceAddress")
                 // The context argument can be null in this case because it is never used anyways (as of Android 5 - 11)
                 device.connectGatt(null, false, gattCallback)
             }

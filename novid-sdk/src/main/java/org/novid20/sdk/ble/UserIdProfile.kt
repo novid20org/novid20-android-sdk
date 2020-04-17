@@ -16,14 +16,14 @@ import android.bluetooth.BluetoothGattService
 
 internal object UserIdProfile {
 
-    fun createNovidService(bleDetectionConfig: BleDetectionConfig): BluetoothGattService {
+    fun createNovidService(bleConfig: BleConfig): BluetoothGattService {
         val novidService = BluetoothGattService(
-            bleDetectionConfig.serviceUuid,
+            bleConfig.serviceUuid,
             BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
 
         val userIdCharacteristics = BluetoothGattCharacteristic(
-            bleDetectionConfig.characteristicUuid,
+            bleConfig.characteristicUuid,
             //Read-only characteristic
             BluetoothGattCharacteristic.PROPERTY_READ,
             BluetoothGattCharacteristic.PERMISSION_READ

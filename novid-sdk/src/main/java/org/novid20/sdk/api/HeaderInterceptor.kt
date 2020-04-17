@@ -38,13 +38,13 @@ internal class HeaderInterceptor(
         val response = chain.proceed(newRequest)
         val responseCode = response.code
 
-        if (responseCode == HTTP_UNAUTHORIZED) {
-            // Auth token is invalid, try to refresh it
-            Logger.debug(TAG, "Auth token is expired, refreshing.")
+        // Acquiring lock to prevent other requests from the same instance
+        // from updating the token at the same time
+        synchronized(novidSdk) {
+            if (responseCode == HTTP_UNAUTHORIZED) {
+                // Auth token is invalid, try to refresh it
+                Logger.debug(TAG, "Auth token is expired, refreshing.")
 
-            // Acquiring class lock to prevent other requests
-            // from updating the token at the same time
-            synchronized(this) {
                 Logger.debug(TAG, "Making call to AuthTokenLoader.refreshToken")
                 val newToken = authTokenLoader.refreshToken(config.uid.orEmpty())
                 Logger.debug(TAG, "New token: $newToken")
